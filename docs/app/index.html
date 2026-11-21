@@ -164,6 +164,8 @@ canvas{width:100%;height:170px;display:block}
 .pindots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--brand)}
 .pindots i.on{background:var(--brand)}
 
+#printArea{display:none}
+@media print{body>*:not(#printArea){display:none!important}#printArea{display:block}#printArea pre{font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;margin:0}@page{margin:6mm}}
 .toast{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:var(--ink);color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;font-size:13.5px;opacity:0;transition:.25s;z-index:60;max-width:min(92vw,440px);pointer-events:none;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -201,7 +203,7 @@ function save(){ try{ localStorage.setItem(KEY,JSON.stringify(D)); }catch(e){ to
 const nid=()=>++D.nextId;
 
 function blank(biz){
-  return {ver:1,created:Date.now(),biz,products:[],sales:[],expenses:[],utang:[],
+  return {ver:2,created:Date.now(),biz,products:[],sales:[],expenses:[],utang:[],customers:[],suppliers:[],pos:[],
     employees:[{id:1,name:biz.owner,role:'Owner',comm:0}],attendance:[],days:{},stockLog:[],user:1,nextId:100};
 }
 
@@ -246,7 +248,7 @@ function sampleData(biz){
         const q=Math.max(1,Math.round(rnd()*(p.price<20?6:2)+0.4)); items.push({pid:p.id,name:p.name,qty:q,price:p.price,cost:p.cost}); }
       const r=rnd(), method=r<0.66?'Cash':r<0.84?'GCash':r<0.92?'Maya':r<0.95?'Bank':'Utang';
       const total=items.reduce((a,x)=>a+x.qty*x.price,0);
-      d.sales.push({id:++d.nextId,time:Math.round(t),items,disc:0,method,total,emp:1+Math.floor(rnd()*3),refunded:false,customer:method==='Utang'?['Aling Baby','Kuya Ramon','Tess','Mang Isko'][Math.floor(rnd()*4)]:'',ref:''});
+      d.sales.push({id:++d.nextId,time:Math.round(t),items,disc:0,method,total,emp:1+Math.floor(rnd()*3),refunded:false,customer:method==='Utang'?['Aling Baby','Kuya Ramon','Tess','Mang Isko'][Math.floor(rnd()*4)]:(rnd()<0.18?['Aling Baby','Ate Joy','Mang Ben','Tess','Kuya Ramon','Lola Pining'][Math.floor(rnd()*6)]:''),ref:''});
     }
     const k=dk(day);
     d.days[k]={opening:1500,withdrawals:back===0?0:1000+Math.round(rnd()*4)*500,counted:null};
@@ -268,8 +270,8 @@ function sampleData(biz){
   d.sales.forEach(x=>{ if(wk.has(dk(x.time))) x.items.forEach(i=>units[i.pid]=(units[i.pid]||0)+i.qty); });
   const cover={1:1.6,4:2.2,7:0.8,10:1.2};
   d.products.forEach(p=>{ const v=(units[p.id]||0)/7; p.stock=Math.max(2,Math.round(v*(cover[p.id]||(8+(p.id*5)%12)))); delete p._v; });
-  d.sample=true;
-  return d;
+  d.sample=true; d.ver=1;
+  return migrate(d);
 }
 
 /* =========================================================
@@ -383,6 +385,7 @@ function render(){
 window.n360Back=function(){
   if(UI.scan) { stopScan(); }
   if(UI.sheet){ UI.sheet=null; renderSheet(); return 1; }
+  if(D&&UI.tab==='more'&&UI.sub){ UI.sub=null; render(); return 1; }
   if(D&&UI.tab!=='home'){ UI.tab='home'; render(); return 1; }
   return 0;
 };
@@ -432,6 +435,7 @@ function alerts(){
   if(od.length) a.push(['warn',`${peso(od.reduce((s,u)=>s+bal(u),0))} in utang is overdue from ${od.length} customer${od.length>1?'s':''}`,'utanggo']);
   if(ys){ const ch=Math.round((t.sales-ys)/ys*100); a.push(ch>=0?['good',`Sales are ${ch}% higher than yesterday at this time`]:['warn',`Sales are ${-ch}% lower than yesterday at this time`]); }
   const r=dayRec(keyAdd(todayKey(),-1)); if(stats([keyAdd(todayKey(),-1)]).tx&&r.counted==null&&!D.sample) a.push(['warn','Yesterday\'s cash drawer was not counted','cashgo']);
+  const owe=payables().reduce((s2,p)=>s2+poTotal(p),0); if(owe) a.push(['warn',`You owe suppliers ${peso(owe,1)} for deliveries`,'supgo']);
   if(!D.products.length) a.push(['warn','Add your products to start recording sales','addprod']);
   return a;
 }
@@ -488,7 +492,7 @@ function sheetCheckout(){
     <div class="f"><label>Payment</label><div class="methods">${METHODS.map(m=>`<button data-act="method" data-v="${m}" class="${UI.method===m?'on':''}">${m}</button>`).join('')}</div></div>
     ${UI.method==='Cash'?`<div class="row2"><div class="f"><label for="cashin">Cash received</label><input id="cashin" type="number" inputmode="decimal" min="0" value="${esc(UI.cashIn)}" placeholder="${total}"></div><div class="f"><label>Change</label><div class="big num" style="font-size:22px;color:${UI.cashIn&&change<0?'var(--bad)':'var(--good)'}" id="changeOut">${UI.cashIn?peso(change,1):'—'}</div></div></div>`:''}
     ${['GCash','Maya','Bank'].includes(UI.method)?`<div class="f"><label for="ref">Reference number (optional)</label><input id="ref" inputmode="numeric" value="${esc(UI.ref)}" placeholder="From the customer's confirmation"></div>`:''}
-    ${UI.method==='Utang'?`<div class="f"><label for="cust">Customer name</label><input id="cust" value="${esc(UI.cust)}" placeholder="e.g. Aling Baby" list="ulist"><datalist id="ulist">${D.utang.map(u=>`<option value="${esc(u.name)}">`).join('')}</datalist></div>`:''}
+    <div class="f"><label for="cust">${UI.method==='Utang'?'Customer name (required for utang)':'Customer (optional)'}</label><input id="cust" value="${esc(UI.cust)}" placeholder="e.g. Aling Baby" list="ulist"><datalist id="ulist">${D.customers.map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist></div>
     <button class="btn btn-primary btn-block" data-act="complete" id="completeBtn">Complete sale · ${peso(total,1)}</button>
   </div>`;
 }
@@ -498,8 +502,8 @@ function completeSale(){
   if(UI.method==='Cash'&&UI.cashIn!==''&&+UI.cashIn<total){ toast('Cash received is less than the total.'); return; }
   if(UI.method==='Utang'&&!UI.cust.trim()){ toast('Enter the customer\'s name for utang.'); return; }
   const items=lines.map(([id,q])=>{const p=prod(+id);p.stock-=q;return {pid:p.id,name:p.name,qty:q,price:p.price,cost:p.cost};});
-  const s={id:nid(),time:Date.now(),items,disc,method:UI.method,total,emp:D.user,refunded:false,customer:UI.method==='Utang'?UI.cust.trim():'',ref:UI.ref.trim()};
-  D.sales.push(s);
+  const s={id:nid(),time:Date.now(),items,disc,method:UI.method,total,emp:D.user,refunded:false,customer:UI.cust.trim(),ref:UI.ref.trim()};
+  D.sales.push(s); if(s.customer){ const c=ensureCust(s.customer); s.customer=c.name; }
   if(s.method==='Utang'){
     let u=D.utang.find(x=>x.name.toLowerCase()===s.customer.toLowerCase()&&bal(x)>0);
     const names=items.map(i=>i.name).join(', ');
@@ -520,17 +524,17 @@ function receiptText(s,cash){
   L.push(line('Paid by '+s.method,s.method==='Cash'&&cash?peso(cash,1):''));
   if(s.method==='Cash'&&cash) L.push(line('Change',peso(cash-s.total,1)));
   if(s.ref) L.push('Ref no. '+s.ref);
-  if(s.customer) L.push('Utang of: '+s.customer);
+  if(s.customer) L.push((s.method==='Utang'?'Utang of: ':'Customer: ')+s.customer);
   if(s.refunded) L.push('*** REFUNDED ***');
   L.push('','Salamat po! Balik po kayo.','This is not an official receipt.');
   return L.filter(x=>x!=null).join('\n');
 }
 function sheetReceipt(){ const {s,cash}=UI.receipt;
   return `<h3>Sale complete <button class="x" data-act="close" aria-label="Close">✕</button></h3><div class="receipt">${esc(receiptText(s,cash))}</div>
-  <div class="row2" style="margin-top:12px"><button class="btn btn-ghost" data-act="sharercpt">Send receipt</button><button class="btn btn-primary" data-act="close">New sale</button></div>`; }
+  <div class="row2" style="margin-top:12px"><button class="btn btn-ghost" data-act="sharercpt">Send receipt</button><button class="btn btn-ghost" data-act="printrcpt">Print</button></div><button class="btn btn-primary btn-block" style="margin-top:8px" data-act="close">New sale</button>`; }
 function sheetTx(){ const s=D.sales.find(x=>x.id===UI.txId);
   return `<h3>Sale #${s.id} <button class="x" data-act="close" aria-label="Close">✕</button></h3><div class="receipt">${esc(receiptText(s,0))}</div>
-  <div class="row2" style="margin-top:12px"><button class="btn btn-ghost" data-act="sharetx">Send receipt</button>${s.refunded?'<span></span>':`<button class="btn btn-danger" data-act="refund" data-id="${s.id}">Refund</button>`}</div>
+  <div class="row2" style="margin-top:12px"><button class="btn btn-ghost" data-act="sharetx">Send receipt</button><button class="btn btn-ghost" data-act="printtx">Print</button></div><div class="row2" style="margin-top:8px"><span></span>${s.refunded?'<span></span>':`<button class="btn btn-danger" data-act="refund" data-id="${s.id}">Refund</button>`}</div>
   ${s.refunded?'<p class="empty">Refunded. Items went back to stock.</p>':''}`; }
 
 /* =========================================================
@@ -547,7 +551,7 @@ function vProducts(){
   return `<div class="head"><div><span class="sub">${D.products.length} products · stock value ${peso(val)}</span><h2>Products</h2></div><button class="btn btn-primary btn-sm" data-act="addprod">+ Add</button></div>
   <div class="search"><input id="prodq" placeholder="Search name or barcode" value="${esc(UI.pq)}" aria-label="Search products"><button class="btn btn-ghost btn-sm" data-act="sheet" data-v="stockin">${svg('stock',16)} Stock in</button></div>
   <div class="seg">${['All','Low stock','Slow moving'].map(x=>`<button data-act="pfilter" data-v="${x}" class="${f===x?'on':''}">${x}</button>`).join('')}</div>
-  ${low.length?`<div class="card" style="border-left:4px solid var(--bad)"><h4>Stock forecast</h4>${low.map(p=>`<p style="margin:4px 0;font-size:13.5px">${esc(p.name)} sells about <b>${vel(p)} a day</b>. With ${p.stock} left, you may run out in <b>${Math.max(1,Math.round(daysLeft(p)))} day${Math.round(daysLeft(p))>1?'s':''}</b>.</p>`).join('')}</div>`:''}
+  ${low.length?`<div class="card" style="border-left:4px solid var(--bad)"><h4>Stock forecast <button class="btn btn-ghost btn-sm" data-act="porestock">Order now</button></h4>${low.map(p=>`<p style="margin:4px 0;font-size:13.5px">${esc(p.name)} sells about <b>${vel(p)} a day</b>. With ${p.stock} left, you may run out in <b>${Math.max(1,Math.round(daysLeft(p)))} day${Math.round(daysLeft(p))>1?'s':''}</b>.</p>`).join('')}</div>`:''}
   <div class="card"><div class="list">${list.map(p=>{const dl=daysLeft(p),v=vel(p);
     const pill=p.stock<=0?'<span class="pill p-bad">Out</span>':dl<=3?`<span class="pill p-bad">~${Math.max(1,Math.round(dl))}d left</span>`:dl<=7?`<span class="pill p-warn">~${Math.round(dl)}d left</span>`:v?'<span class="pill p-good">OK</span>':'<span class="pill p-info">New</span>';
     return `<button class="row" data-act="editprod" data-id="${p.id}"><div class="ico">${abbr(p.name)}</div><div class="grow"><b>${esc(p.name)}</b><span>${p.stock} in stock${v?` · sells ~${v}/day`:''} · ${peso(p.price,1)} (cost ${peso(p.cost,1)})</span></div>${pill}</button>`}).join('')||'<p class="empty">No products here.</p>'}</div></div>`;
@@ -567,7 +571,7 @@ function sheetProduct(){
   <div class="f"><label for="pf-price">Selling price (₱)</label><input id="pf-price" data-pf="price" type="number" inputmode="decimal" min="0" step="0.25" value="${esc(f.price)}"></div></div>
   <p class="empty" id="marginOut" style="margin-top:-6px">${margin!=null?`Profit per piece: ${peso(f.price-f.cost,1)} (${margin}% margin)`:'Enter cost and price to see your profit per piece.'}</p>
   <div class="row2"><div class="f"><label for="pf-stock">${f.id?'Stock on hand':'Starting stock'}</label><input id="pf-stock" data-pf="stock" type="number" inputmode="numeric" value="${esc(f.stock)}"></div>
-  <div class="f"><label for="pf-sup">Supplier</label><input id="pf-sup" data-pf="supplier" value="${esc(f.supplier)}" placeholder="Optional"></div></div>
+  <div class="f"><label for="pf-sup">Supplier</label><input id="pf-sup" data-pf="supplier" value="${esc(f.supplier)}" placeholder="Optional" list="suplist2"><datalist id="suplist2">${D.suppliers.map(x=>`<option value="${esc(x.name)}">`).join('')}</datalist></div></div>
   <div class="f"><label for="pf-bc">Barcode</label><div class="inrow"><input id="pf-bc" data-pf="barcode" inputmode="numeric" value="${esc(f.barcode)}" placeholder="Scan or type"><button class="btn btn-dark btn-sm" data-act="scanfield">${svg('scan',16)} Scan</button></div></div>
   <button class="btn btn-primary btn-block" data-act="saveprod">Save product</button>
   ${f.id?`<button class="btn btn-danger btn-block" style="margin-top:8px" data-act="delprod">Delete product</button>`:''}`;
@@ -578,6 +582,7 @@ function saveProduct(){
   if(!(price>0)){toast('Enter a selling price.');return;}
   if(f.barcode&&D.products.some(p=>p.barcode===String(f.barcode).trim()&&p.id!==f.id)){toast('Another product already uses this barcode.');return;}
   const data={name,cat:String(f.cat).trim()||'General',cost:cost>=0?cost:0,price,stock:Math.round(+f.stock||0),barcode:String(f.barcode).trim(),supplier:String(f.supplier).trim()};
+  ensureSup(data.supplier);
   if(f.id){ const p=prod(f.id); const diff=data.stock-p.stock; if(diff) D.stockLog.push({pid:p.id,qty:diff,cost:data.cost,time:Date.now(),type:'adjust'}); Object.assign(p,data); toast(`${name} updated.`); }
   else { D.products.push({id:nid(),...data}); toast(`${name} added.`); }
   UI.pform=null; UI.sheet=UI.afterProd||null; UI.afterProd=null; save(); render();
@@ -704,7 +709,14 @@ function rStaff(){
    MORE / ACCOUNT
    ========================================================= */
 function vMore(){
+  if(UI.sub==='customers') return vCustomers();
+  if(UI.sub==='suppliers') return vSuppliers();
+  const owe=payables().reduce((a,p)=>a+poTotal(p),0), openPo=D.pos.filter(p=>p.status!=='Received').length;
   return `<div class="head"><div><span class="sub">${esc(D.biz.type||'')}${D.biz.city?' · '+esc(D.biz.city):''}</span><h2>More</h2></div></div>
+  <div class="card"><div class="list">
+    <button class="row" data-act="sub" data-v="customers"><div class="ico">${svg('more',18)}</div><div class="grow"><b>Customers</b><span>${D.customers.length} customers · purchases and utang</span></div><span aria-hidden="true">›</span></button>
+    <button class="row" data-act="sub" data-v="suppliers"><div class="ico">${svg('prod',18)}</div><div class="grow"><b>Suppliers &amp; purchase orders</b><span>${D.suppliers.length} suppliers${openPo?` · ${openPo} open order${openPo>1?'s':''}`:''}${owe?` · you owe ${peso(owe)}`:''}</span></div><span aria-hidden="true">›</span></button>
+  </div></div>
   <div class="card"><h4>Business profile</h4>
     <div class="f"><label for="bizname">Business name</label><input id="bizname" value="${esc(D.biz.name)}"></div>
     <div class="row2"><div class="f"><label for="bizowner">Owner</label><input id="bizowner" value="${esc(D.biz.owner)}"></div><div class="f"><label for="bizcity">City / town</label><input id="bizcity" value="${esc(D.biz.city||'')}"></div></div>
@@ -726,6 +738,132 @@ function sheetEmp(){
   <div class="f"><label for="emn">Name</label><input id="emn"></div>
   <div class="row2"><div class="f"><label for="emr">Role</label><input id="emr" value="Tindera"></div><div class="f"><label for="emc">Commission (%)</label><input id="emc" type="number" inputmode="decimal" min="0" value="0"></div></div>
   <button class="btn btn-primary btn-block" data-act="doemp">Save</button>`;
+}
+
+/* =========================================================
+   CUSTOMERS, SUPPLIERS & PURCHASE ORDERS (Phase 2)
+   ========================================================= */
+function migrate(d){
+  if(!d) return d;
+  d.customers=d.customers||[]; d.suppliers=d.suppliers||[]; d.pos=d.pos||[];
+  if((d.ver||1)<2){
+    const seen=new Set(d.customers.map(c=>c.name.toLowerCase()));
+    const addC=n=>{n=String(n||'').trim(); if(n&&!seen.has(n.toLowerCase())){seen.add(n.toLowerCase()); d.customers.push({id:++d.nextId,name:n,phone:'',address:'',notes:'',created:Date.now()});}};
+    d.utang.forEach(u=>addC(u.name)); d.sales.forEach(s=>addC(s.customer));
+    const ss=new Set(d.suppliers.map(s=>s.name.toLowerCase()));
+    d.products.forEach(p=>{const n=String(p.supplier||'').trim(); if(n&&n!=='—'&&!ss.has(n.toLowerCase())){ss.add(n.toLowerCase()); d.suppliers.push({id:++d.nextId,name:n,phone:'',notes:''});}});
+    d.ver=2;
+  }
+  return d;
+}
+const findCust=n=>D.customers.find(c=>c.name.toLowerCase()===String(n||'').trim().toLowerCase());
+function ensureCust(n){ n=String(n||'').trim(); if(!n) return null; let c=findCust(n); if(!c){ c={id:nid(),name:n,phone:'',address:'',notes:'',created:Date.now()}; D.customers.push(c);} return c; }
+function custStats(c){ const ln=c.name.toLowerCase(); const s=live().filter(x=>(x.customer||'').toLowerCase()===ln);
+  return {sales:s,total:s.reduce((a,x)=>a+x.total,0),count:s.length,last:s.reduce((a,x)=>Math.max(a,x.time),0),owed:D.utang.filter(u=>u.name.toLowerCase()===ln).reduce((a,u)=>a+bal(u),0)}; }
+const findSup=n=>D.suppliers.find(s=>s.name.toLowerCase()===String(n||'').trim().toLowerCase());
+function ensureSup(n){ n=String(n||'').trim(); if(!n||n==='—') return null; let s=findSup(n); if(!s){ s={id:nid(),name:n,phone:'',notes:''}; D.suppliers.push(s);} return s; }
+const poTotal=po=>po.items.reduce((a,i)=>a+i.qty*i.cost,0);
+const payables=()=>D.pos.filter(p=>p.status==='Received'&&p.payable);
+const PO_PILL={Draft:'p-info',Ordered:'p-warn',Received:'p-good'};
+
+function subHead(title,sub,btn){ return `<div class="head"><div><button class="btn btn-ghost btn-sm" data-act="subback" style="margin-bottom:6px">← More</button><span class="sub">${sub}</span><h2>${title}</h2></div>${btn||''}</div>`; }
+function vCustomers(){
+  const q=(UI.cq||'').toLowerCase();
+  const list=D.customers.map(c=>({c,st:custStats(c)})).filter(x=>!q||x.c.name.toLowerCase().includes(q)||(x.c.phone||'').includes(q)).sort((a,b)=>b.st.total-a.st.total);
+  const owed=D.customers.reduce((a,c)=>a+custStats(c).owed,0);
+  return subHead('Customers',`${D.customers.length} customers · ${peso(owed)} utang`,`<button class="btn btn-primary btn-sm" data-act="sheet" data-v="custnew">+ Add</button>`)+`
+  <div class="search"><input id="custq" placeholder="Search name or number" value="${esc(UI.cq||'')}" aria-label="Search customers"></div>
+  <div class="card"><div class="list">${list.map(({c,st},i)=>`<button class="row" data-act="cust" data-id="${c.id}"><div class="ico">${abbr(c.name)}</div><div class="grow"><b>${esc(c.name)}${i<3&&st.total?' <span class="pill p-acc">Suki</span>':''}</b><span>${st.count} purchase${st.count===1?'':'s'}${st.last?' · last '+fmtDate(st.last):''}${c.phone?' · '+esc(c.phone):''}</span></div><div class="amt num">${peso(st.total)}${st.owed?`<span style="color:var(--bad)">owes ${peso(st.owed,1)}</span>`:''}</div></button>`).join('')||'<p class="empty">No customers yet. Add one, or type a customer name when you record a sale.</p>'}</div></div>`;
+}
+function sheetCust(){
+  const c=D.customers.find(x=>x.id===UI.custId), st=custStats(c), recent=st.sales.slice().sort((a,b)=>b.time-a.time).slice(0,6);
+  return `<h3>${esc(c.name)} <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="tiles"><div class="tile"><small>Total bought</small><b class="num">${peso(st.total)}</b></div><div class="tile"><small>Visits</small><b class="num">${st.count}</b></div><div class="tile ${st.owed?'alert':''}"><small>Utang</small><b class="num">${peso(st.owed,1)}</b></div></div>
+  ${st.count?`<p class="empty" style="padding-top:0">Average ${peso(st.total/st.count,1)} per visit · last visit ${fmtDate(st.last,{month:'short',day:'numeric'})}</p>`:''}
+  <div class="f"><label for="cn">Name</label><input id="cn" value="${esc(c.name)}"></div>
+  <div class="row2"><div class="f"><label for="cp">Mobile number</label><input id="cp" inputmode="tel" value="${esc(c.phone||'')}" placeholder="09xx xxx xxxx"></div><div class="f"><label for="ca">Address</label><input id="ca" value="${esc(c.address||'')}"></div></div>
+  <div class="f"><label for="cnotes">Notes</label><input id="cnotes" value="${esc(c.notes||'')}" placeholder="e.g. Always buys rice on Fridays"></div>
+  <div class="row2"><button class="btn btn-primary" data-act="savecust">Save</button>${c.phone?`<a class="btn btn-ghost" href="tel:${esc(c.phone.replace(/[^0-9+]/g,''))}">Call ${esc(c.phone)}</a>`:'<span></span>'}</div>
+  ${st.owed?`<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="utanggo">See utang details</button>`:''}
+  <div class="card" style="margin-top:12px"><h4>Recent purchases</h4><div class="list">${recent.map(s=>`<button class="row" data-act="tx" data-id="${s.id}"><div class="grow"><b>${esc(s.items.map(i=>i.qty+'× '+i.name).join(', '))}</b><span>${fmtDate(s.time)} · ${s.method}</span></div><div class="amt num">${peso(s.total,1)}</div></button>`).join('')||'<p class="empty">No purchases recorded yet.</p>'}</div></div>
+  <button class="btn btn-danger btn-sm" data-act="delcust">Delete customer</button>`;
+}
+function sheetCustNew(){
+  return `<h3>New customer <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="f"><label for="ncn">Name</label><input id="ncn"></div>
+  <div class="row2"><div class="f"><label for="ncp">Mobile number</label><input id="ncp" inputmode="tel" placeholder="09xx xxx xxxx"></div><div class="f"><label for="nca">Address</label><input id="nca"></div></div>
+  <button class="btn btn-primary btn-block" data-act="docustnew">Save customer</button>`;
+}
+function vSuppliers(){
+  const tab=UI.supTab||'orders', owe=payables().reduce((a,p)=>a+poTotal(p),0);
+  const head=subHead('Suppliers & orders',`${D.suppliers.length} suppliers${owe?` · you owe ${peso(owe,1)}`:''}`,tab==='orders'?`<button class="btn btn-primary btn-sm" data-act="sheet" data-v="ponew">+ Order</button>`:`<button class="btn btn-primary btn-sm" data-act="sheet" data-v="supnew">+ Supplier</button>`);
+  const seg=`<div class="seg">${[['orders','Purchase orders'],['sups','Suppliers']].map(([k,l])=>`<button data-act="supTab" data-v="${k}" class="${tab===k?'on':''}">${l}</button>`).join('')}</div>`;
+  if(tab==='orders'){
+    const pos=D.pos.slice().sort((a,b)=>({Draft:0,Ordered:1,Received:2}[a.status]-{Draft:0,Ordered:1,Received:2}[b.status])||b.created-a.created);
+    const openIds=new Set(D.pos.filter(p=>p.status!=='Received').flatMap(p=>p.items.map(i=>i.pid))), plan=restockPlan().filter(x=>!openIds.has(x.p.id));
+    return head+seg+`${plan.length?`<div class="card" style="border-left:4px solid var(--warn)"><h4>${plan.length} product${plan.length>1?'s':''} to restock</h4><p class="empty" style="padding-top:0">Make draft orders for each supplier from the restock list. You can edit them before sending.</p><button class="btn btn-dark btn-sm" data-act="porestock">Create orders from restock list</button></div>`:''}
+    ${owe?`<div class="card" style="border-left:4px solid var(--bad)"><h4>Unpaid deliveries <b class="num">${peso(owe,1)}</b></h4>${payables().map(p=>`<div class="kv"><span>#${p.id} · ${esc(p.supName)}</span><button class="btn btn-ghost btn-sm" data-act="po" data-id="${p.id}">Pay</button></div>`).join('')}</div>`:''}
+    <div class="card"><div class="list">${pos.map(p=>`<button class="row" data-act="po" data-id="${p.id}"><div class="ico">PO</div><div class="grow"><b>#${p.id} · ${esc(p.supName)}</b><span>${p.items.length} item${p.items.length===1?'':'s'} · ${fmtDate(p.receivedAt||p.sentAt||p.created)}${p.payable?' · unpaid':''}</span></div><div class="amt num">${peso(poTotal(p),1)}<span><span class="pill ${PO_PILL[p.status]}">${p.status}</span></span></div></button>`).join('')||'<p class="empty">No purchase orders yet.</p>'}</div></div>`;
+  }
+  return head+seg+`<div class="card"><div class="list">${D.suppliers.map(s=>{const n=D.products.filter(p=>(p.supplier||'').toLowerCase()===s.name.toLowerCase()).length, bought=D.pos.filter(p=>p.supId===s.id&&p.status==='Received').reduce((a,p)=>a+poTotal(p),0);
+    return `<button class="row" data-act="sup" data-id="${s.id}"><div class="ico">${abbr(s.name)}</div><div class="grow"><b>${esc(s.name)}</b><span>${n} product${n===1?'':'s'}${s.phone?' · '+esc(s.phone):''}</span></div><div class="amt num">${bought?peso(bought):''}${bought?'<span>received</span>':''}</div></button>`}).join('')||'<p class="empty">No suppliers yet.</p>'}</div></div>`;
+}
+function sheetSup(){
+  const s=D.suppliers.find(x=>x.id===UI.supId), prods=D.products.filter(p=>(p.supplier||'').toLowerCase()===s.name.toLowerCase());
+  return `<h3>${esc(s.name)} <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="f"><label for="sn">Name</label><input id="sn" value="${esc(s.name)}"></div>
+  <div class="row2"><div class="f"><label for="sph">Mobile number</label><input id="sph" inputmode="tel" value="${esc(s.phone||'')}"></div><div class="f"><label for="snotes">Notes</label><input id="snotes" value="${esc(s.notes||'')}" placeholder="e.g. Delivers every Tuesday"></div></div>
+  <div class="row2"><button class="btn btn-primary" data-act="savesup">Save</button><button class="btn btn-ghost" data-act="ponewfor">New order</button></div>
+  <div class="card" style="margin-top:12px"><h4>Products from this supplier</h4>${prods.map(p=>`<div class="kv"><span>${esc(p.name)}</span><span class="num">${p.stock} left · cost ${peso(p.cost,1)}</span></div>`).join('')||'<p class="empty">Set this supplier on a product to see it here.</p>'}</div>
+  <button class="btn btn-danger btn-sm" data-act="delsup">Delete supplier</button>`;
+}
+function sheetSupNew(){
+  return `<h3>New supplier <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="f"><label for="nsn">Name</label><input id="nsn" placeholder="e.g. Puregold Wholesale"></div>
+  <div class="f"><label for="nsp">Mobile number</label><input id="nsp" inputmode="tel"></div>
+  <button class="btn btn-primary btn-block" data-act="dosupnew">Save supplier</button>`;
+}
+function sheetPoNew(){
+  return `<h3>New purchase order <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="f"><label for="pos">Supplier</label><input id="pos" list="suplist" placeholder="Choose or type a supplier" value="${esc(UI.poSupName||'')}"><datalist id="suplist">${D.suppliers.map(s=>`<option value="${esc(s.name)}">`).join('')}</datalist></div>
+  <button class="btn btn-primary btn-block" data-act="doponew">Create order</button>`;
+}
+function newPo(supName,items){ const s=ensureSup(supName)||{id:0,name:supName||'No supplier'}; const po={id:nid(),supId:s.id,supName:s.name,created:Date.now(),status:'Draft',items:items||[],sentAt:null,receivedAt:null,payable:false}; D.pos.push(po); return po; }
+function sheetPo(){
+  const po=D.pos.find(x=>x.id===UI.poId), edit=po.status!=='Received';
+  const inOrder=new Set(po.items.map(i=>i.pid));
+  return `<h3>Order #${po.id} <button class="x" data-act="close" aria-label="Close">✕</button></h3>
+  <div class="kv"><span>Supplier</span><b>${esc(po.supName)}</b></div>
+  <div class="kv"><span>Status</span><span class="pill ${PO_PILL[po.status]}">${po.status}${po.payable?' · unpaid':''}</span></div>
+  <div style="margin:10px 0">${po.items.map((it,i)=>{const p=prod(it.pid);return `<div class="cartline"><div class="grow"><b>${esc(p?p.name:'Deleted product')}</b>${p?`<span>${p.stock} in stock</span>`:''}</div>
+    ${edit?`<input aria-label="Quantity" data-poq="${i}" type="number" inputmode="numeric" min="1" value="${it.qty}" style="width:64px;border:1.5px solid var(--line);border-radius:8px;padding:6px"> × <input aria-label="Cost" data-poc="${i}" type="number" inputmode="decimal" min="0" step="0.25" value="${it.cost}" style="width:74px;border:1.5px solid var(--line);border-radius:8px;padding:6px"><button class="x" data-act="poitemdel" data-i="${i}" aria-label="Remove">✕</button>`
+    :`<span class="num">${it.qty} × ${peso(it.cost,1)}</span>`}</div>`}).join('')||'<p class="empty">No items yet. Add products below.</p>'}</div>
+  ${edit?`<div class="inrow" style="margin-bottom:10px"><select id="poAddSel" aria-label="Product to add" style="flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px;min-width:0">${D.products.filter(p=>!inOrder.has(p.id)).map(p=>`<option value="${p.id}">${esc(p.name)} (${p.stock} left)</option>`).join('')}</select><button class="btn btn-ghost btn-sm" data-act="poadd">Add</button></div>`:''}
+  <div class="kv tot"><span>Estimated total</span><span class="num" id="poTot">${peso(poTotal(po),1)}</span></div>
+  ${edit?`<div class="row2" style="margin-top:12px"><button class="btn btn-ghost" data-act="posend" ${po.items.length?'':'disabled'}>Send to supplier</button><button class="btn btn-danger" data-act="podelete">Delete</button></div>
+    <div class="card" style="margin-top:12px"><h4>Delivery arrived?</h4><p class="empty" style="padding-top:0">Check the quantities and costs above against the delivery, then add everything to stock.</p>
+    <div class="f"><label for="poPaid">Paid with</label><select id="poPaid"><option>Cash</option><option>GCash</option><option>Maya</option><option>Bank</option><option value="later">Not yet paid (pay later)</option></select></div>
+    <button class="btn btn-primary btn-block" data-act="poreceive" ${po.items.length?'':'disabled'}>Mark as received and add to stock</button></div>`
+  :`<p class="empty">Received ${fmtDate(po.receivedAt,{month:'short',day:'numeric',year:'numeric'})}. Items were added to stock.</p>
+    ${po.payable?`<div class="card"><h4>Pay this delivery</h4><div class="f"><label for="poPayM">Paid with</label><select id="poPayM"><option>Cash</option><option>GCash</option><option>Maya</option><option>Bank</option></select></div><button class="btn btn-primary btn-block" data-act="popay">Record payment of ${peso(poTotal(po),1)}</button></div>`:''}`}`;
+}
+function poText(po){
+  const L=[`PURCHASE ORDER #${po.id}`,`From: ${D.biz.name} (${D.biz.owner})${D.biz.city?', '+D.biz.city:''}`,`To: ${po.supName}`,`Date: ${fmtDate(Date.now(),{month:'long',day:'numeric',year:'numeric'})}`,''];
+  po.items.forEach(i=>{const p=prod(i.pid); if(p) L.push(`• ${i.qty} × ${p.name}`);});
+  L.push('',`Estimated total: ${peso(poTotal(po),1)}`,'Please confirm the prices and the delivery date. Salamat po!');
+  return L.join('\n');
+}
+function createFromRestock(){
+  const open=new Set(D.pos.filter(p=>p.status!=='Received').flatMap(p=>p.items.map(i=>i.pid)));
+  const groups={}; restockPlan().filter(x=>!open.has(x.p.id)).forEach(x=>{const k=(x.p.supplier||'').trim()||'No supplier'; (groups[k]=groups[k]||[]).push({pid:x.p.id,qty:x.qty,cost:x.p.cost});});
+  const names=Object.keys(groups); names.forEach(n=>newPo(n==='No supplier'?'':n,groups[n]).supName=n);
+  return names.length;
+}
+function printText(text,title){
+  if(window.N360Android&&N360Android.printText){ N360Android.printText(title||'Receipt',text); return; }
+  let el=$('printArea'); if(!el){ el=document.createElement('div'); el.id='printArea'; document.body.appendChild(el); }
+  el.innerHTML=`<pre>${esc(text)}</pre>`;
+  try{ window.print(); }catch(e){ toast('Printing is not available here. Use Send instead.'); }
 }
 
 /* =========================================================
@@ -835,7 +973,7 @@ function gotCode(code){
 function renderSheet(){
   const el=$('sheet'); if(!el) return;
   const k=UI.sheet; if(!k){ el.innerHTML=''; return; }
-  const fn={checkout:sheetCheckout,receipt:sheetReceipt,tx:sheetTx,stockin:sheetStockIn,product:sheetProduct,expense:sheetExpense,withdraw:sheetWithdraw,utang:sheetUtang,utangnew:sheetUtangNew,ai:sheetAI,scan:sheetScan,emp:sheetEmp}[k];
+  const fn={cust:sheetCust,custnew:sheetCustNew,sup:sheetSup,supnew:sheetSupNew,po:sheetPo,ponew:sheetPoNew,checkout:sheetCheckout,receipt:sheetReceipt,tx:sheetTx,stockin:sheetStockIn,product:sheetProduct,expense:sheetExpense,withdraw:sheetWithdraw,utang:sheetUtang,utangnew:sheetUtangNew,ai:sheetAI,scan:sheetScan,emp:sheetEmp}[k];
   el.innerHTML=`<div class="sheet-bg" data-act="bgclose"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${fn()}</div></div>`;
 }
 function drawBars(c){
@@ -888,7 +1026,7 @@ document.addEventListener('click',e=>{
     case 'goFresh': if(confirmTwice(t,'Tap again to clear the sample and set up your real business')){ try{localStorage.removeItem(KEY);}catch(err){} D=null; UI.ob=null; UI.tab='home'; render(); } break;
     case 'pinkey': { if(v==='⌫') UI.pin=UI.pin.slice(0,-1); else if(UI.pin.length<4) UI.pin+=v;
       if(UI.pin.length===4){ if(UI.pin===D.biz.pin){UI.unlocked=true;UI.pin='';} else {UI.pin='';toast('Wrong PIN. Try again.');} } render(); break; }
-    case 'tab': UI.tab=v; UI.sheet=null; render(); $('body').scrollTop=0; break;
+    case 'tab': UI.tab=v; UI.sheet=null; UI.sub=null; render(); $('body').scrollTop=0; break;
     case 'sheet': UI.sheet=v; if(v==='stockin') UI.stockPid=null; renderSheet(); break;
     case 'close': if(UI.scan) stopScan(); UI.sheet=null; UI.pform=null; render(); break;
     case 'lowgo': UI.tab='products'; UI.pfilter='Low stock'; render(); break;
@@ -933,7 +1071,7 @@ document.addEventListener('click',e=>{
     case 'payutang': { const u=D.utang.find(x=>x.id===UI.utangId), amt=Math.min(+$('up').value||0,bal(u)); if(!(amt>0)){toast('Enter a payment amount.');break;}
       u.payments.push({time:Date.now(),amt,method:$('upm').value}); save(); UI.sheet=null; render(); toast(`${peso(amt,1)} received from ${u.name}. Balance: ${peso(bal(u),1)}.`); break; }
     case 'shareutang': shareText(UI.utangMsg,'Reminder'); break;
-    case 'doutangnew': { const n=$('un').value.trim(), amt=+$('ua').value; if(!n||!(amt>0)){toast('Enter a name and amount.');break;}
+    case 'doutangnew': { const n=$('un').value.trim(), amt=+$('ua').value; if(!n||!(amt>0)){toast('Enter a name and amount.');break;} ensureCust(n);
       D.utang.push({id:nid(),name:n,phone:'',amount:amt,borrowed:Date.now(),due:$('ud').value||keyAdd(todayKey(),14),items:$('ui').value.trim()||'Old balance',payments:[]}); save(); UI.sheet=null; render(); toast(`Utang of ${n} saved.`); break; }
     case 'tin': { D.attendance.push({emp:id,date:todayKey(),tin:Date.now(),tout:null}); save(); render(); toast('Time in saved.'); break; }
     case 'tout': { const r=D.attendance.find(x=>x.emp===id&&x.date===todayKey()); r.tout=Date.now(); save(); render(); toast('Time out saved.'); break; }
@@ -948,6 +1086,42 @@ document.addEventListener('click',e=>{
     case 'exportcsv': exportCSV(); break;
     case 'wipe': if(confirmTwice(t,'Tap again to erase everything')){ try{localStorage.removeItem(KEY);}catch(err){} D=null; UI.ob=null; UI.tab='home'; UI.unlocked=false; render(); } break;
     case 'askq': ask(v); break;
+    case 'sub': UI.sub=v; render(); $('body').scrollTop=0; break;
+    case 'subback': UI.sub=null; render(); break;
+    case 'supgo': UI.tab='more'; UI.sub='suppliers'; UI.supTab='orders'; render(); break;
+    case 'cust': UI.custId=id; UI.sheet='cust'; renderSheet(); break;
+    case 'savecust': { const c=D.customers.find(x=>x.id===UI.custId), n=$('cn').value.trim(); if(!n){toast('Enter a name.');break;}
+      if(n.toLowerCase()!==c.name.toLowerCase()&&findCust(n)){toast('Another customer has that name.');break;}
+      const old=c.name.toLowerCase(); if(n!==c.name){ D.sales.forEach(x=>{if((x.customer||'').toLowerCase()===old)x.customer=n;}); D.utang.forEach(u=>{if(u.name.toLowerCase()===old)u.name=n;}); }
+      Object.assign(c,{name:n,phone:$('cp').value.trim(),address:$('ca').value.trim(),notes:$('cnotes').value.trim()}); save(); render(); toast('Customer saved.'); break; }
+    case 'delcust': { if(!confirmTwice(t,'Tap again to delete')) break; D.customers=D.customers.filter(x=>x.id!==UI.custId); save(); UI.sheet=null; render(); toast('Customer removed. Past sales and utang are kept.'); break; }
+    case 'docustnew': { const n=$('ncn').value.trim(); if(!n){toast('Enter a name.');break;} if(findCust(n)){toast('That customer already exists.');break;}
+      D.customers.push({id:nid(),name:n,phone:$('ncp').value.trim(),address:$('nca').value.trim(),notes:'',created:Date.now()}); save(); UI.sheet=null; render(); toast(`${n} added.`); break; }
+    case 'supTab': UI.supTab=v; render(); break;
+    case 'sup': UI.supId=id; UI.sheet='sup'; renderSheet(); break;
+    case 'savesup': { const sp=D.suppliers.find(x=>x.id===UI.supId), n=$('sn').value.trim(); if(!n){toast('Enter a name.');break;}
+      if(n!==sp.name){ D.products.forEach(p=>{if((p.supplier||'').toLowerCase()===sp.name.toLowerCase())p.supplier=n;}); D.pos.forEach(p=>{if(p.supId===sp.id)p.supName=n;}); }
+      Object.assign(sp,{name:n,phone:$('sph').value.trim(),notes:$('snotes').value.trim()}); save(); render(); toast('Supplier saved.'); break; }
+    case 'delsup': { if(!confirmTwice(t,'Tap again to delete')) break; D.suppliers=D.suppliers.filter(x=>x.id!==UI.supId); save(); UI.sheet=null; render(); break; }
+    case 'dosupnew': { const n=$('nsn').value.trim(); if(!n){toast('Enter a name.');break;} if(findSup(n)){toast('That supplier already exists.');break;}
+      D.suppliers.push({id:nid(),name:n,phone:$('nsp').value.trim(),notes:''}); save(); UI.sheet=null; render(); toast(`${n} added.`); break; }
+    case 'ponewfor': { const sp=D.suppliers.find(x=>x.id===UI.supId); const po=newPo(sp.name,[]); save(); UI.tab='more'; UI.sub='suppliers'; UI.supTab='orders'; UI.poId=po.id; UI.sheet='po'; render(); break; }
+    case 'doponew': { const n=$('pos').value.trim(); if(!n){toast('Choose a supplier.');break;} const po=newPo(n,[]); save(); UI.poId=po.id; UI.sheet='po'; render(); break; }
+    case 'porestock': { const n=createFromRestock(); save(); UI.tab='more'; UI.sub='suppliers'; UI.supTab='orders'; UI.sheet=null; render(); toast(n?`${n} draft order${n>1?'s':''} created. Check and send them.`:'Everything on the restock list is already in an open order.'); break; }
+    case 'po': UI.poId=id; UI.sheet='po'; renderSheet(); break;
+    case 'poadd': { const po=D.pos.find(x=>x.id===UI.poId), sel=$('poAddSel'); if(!sel||!sel.value) break; const p=prod(+sel.value);
+      po.items.push({pid:p.id,qty:Math.max(1,Math.ceil(vel(p)*7-p.stock))||1,cost:p.cost}); save(); renderSheet(); break; }
+    case 'poitemdel': { const po=D.pos.find(x=>x.id===UI.poId); po.items.splice(+t.dataset.i,1); save(); renderSheet(); break; }
+    case 'posend': { const po=D.pos.find(x=>x.id===UI.poId); po.status='Ordered'; po.sentAt=Date.now(); save(); shareText(poText(po),'Order'); render(); break; }
+    case 'podelete': { if(!confirmTwice(t,'Tap again to delete')) break; D.pos=D.pos.filter(x=>x.id!==UI.poId); save(); UI.sheet=null; render(); break; }
+    case 'poreceive': { const po=D.pos.find(x=>x.id===UI.poId), paid=$('poPaid').value;
+      po.items.forEach(i=>{const p=prod(i.pid); if(!p) return; p.stock+=i.qty; p.cost=i.cost; if(po.supName&&po.supName!=='No supplier') p.supplier=po.supName; D.stockLog.push({pid:p.id,qty:i.qty,cost:i.cost,time:Date.now(),type:'in',po:po.id});});
+      po.status='Received'; po.receivedAt=Date.now();
+      if(paid==='later') po.payable=true; else D.expenses.push({id:nid(),time:Date.now(),cat:'Stock purchase',amt:Math.round(poTotal(po)*100)/100,method:paid,note:`Order #${po.id} · ${po.supName}`});
+      save(); render(); toast(`Stock updated from order #${po.id}.`); break; }
+    case 'popay': { const po=D.pos.find(x=>x.id===UI.poId); po.payable=false; D.expenses.push({id:nid(),time:Date.now(),cat:'Stock purchase',amt:Math.round(poTotal(po)*100)/100,method:$('poPayM').value,note:`Payment for order #${po.id} · ${po.supName}`}); save(); render(); toast('Payment recorded.'); break; }
+    case 'printrcpt': printText(receiptText(UI.receipt.s,UI.receipt.cash),'Receipt '+UI.receipt.s.id); break;
+    case 'printtx': { const sx=D.sales.find(x=>x.id===UI.txId); printText(receiptText(sx,0),'Receipt '+sx.id); break; }
   }
 });
 function confirmTwice(btn,label){
@@ -960,7 +1134,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='sx'){ const m=$('sxm'); if(m) m.style.display=e.target.checked?'':'none'; }
   if(e.target.id==='udue'){ const u=D.utang.find(x=>x.id===UI.utangId); if(u&&e.target.value){ u.due=e.target.value; save(); render(); toast('Due date updated.'); } }
   if(e.target.id==='restoreFile'){ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
-    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d||!d.biz||!Array.isArray(d.products)||!Array.isArray(d.sales)) throw 0; D=d; save(); UI.unlocked=true; UI.tab='home'; render(); toast(`Backup restored: ${d.biz.name}.`); }catch(err){ toast('That file is not a Negosyo360 backup.'); } e.target.value=''; };
+    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d||!d.biz||!Array.isArray(d.products)||!Array.isArray(d.sales)) throw 0; D=migrate(d); save(); UI.unlocked=true; UI.tab='home'; render(); toast(`Backup restored: ${d.biz.name}.`); }catch(err){ toast('That file is not a Negosyo360 backup.'); } e.target.value=''; };
     r.readAsText(f); }
 });
 document.addEventListener('input',e=>{
@@ -971,6 +1145,8 @@ document.addEventListener('input',e=>{
     const co=$('changeOut'); if(co){ const ch=(+UI.cashIn||0)-total; co.textContent=UI.cashIn?peso(ch,1):'—'; co.style.color=UI.cashIn&&ch<0?'var(--bad)':'var(--good)'; } }
   if(id==='ref') UI.ref=el.value;
   if(id==='cust') UI.cust=el.value;
+  if(id==='custq'){ UI.cq=el.value; const pos=el.selectionStart; render(); const n=$('custq'); n.focus(); try{n.setSelectionRange(pos,pos);}catch(err){} }
+  if(el.dataset.poq!=null||el.dataset.poc!=null){ const po=D.pos.find(x=>x.id===UI.poId); const i=+(el.dataset.poq??el.dataset.poc); if(el.dataset.poq!=null) po.items[i].qty=Math.max(0,Math.round(+el.value||0)); else po.items[i].cost=Math.max(0,+el.value||0); save(); const tt=$('poTot'); if(tt) tt.textContent=peso(poTotal(po),1); }
   if(el.dataset.pf){ UI.pform[el.dataset.pf]=el.value; if(el.dataset.pf==='price'||el.dataset.pf==='cost'){ const f=UI.pform,o=$('marginOut'); if(o) o.textContent=f.price&&f.cost?`Profit per piece: ${peso(f.price-f.cost,1)} (${Math.round((f.price-f.cost)/f.price*100)}% margin)`:'Enter cost and price to see your profit per piece.'; } }
   if(el.dataset.ob) readOb();
 });
@@ -980,7 +1156,7 @@ window.addEventListener('resize',()=>{ if(D&&UI.tab==='reports'&&UI.rep==='summa
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&D&&D.biz.pin){ setTimeout(()=>{ if(document.hidden){ UI.unlocked=false; } },60000); } else if(!document.hidden&&D) render(); });
 
 /* start */
-D=load();
+D=migrate(load());
 if(D&&!D.biz.pin) UI.unlocked=true;
 render();
 if('serviceWorker' in navigator && location.protocol==='https:' && !/appassets\.androidplatform\.net/.test(location.host)){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }

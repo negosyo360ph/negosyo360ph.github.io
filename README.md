@@ -25,8 +25,11 @@ An all-in-one business app for Philippine small businesses (sari-sari stores, re
 
 Data is stored on the device (localStorage). Back up regularly.
 
+## Phase 2 (in progress)
+- Done: customers (purchase history, visits, utang, contact), suppliers, purchase orders (create from restock list, send by share sheet, receive into stock, pay now or later), printable receipts (Android print / browser print)
+- Next: Supabase accounts and cloud sync (offline queue + sync without duplicates), multi-user and multi-branch
+
 ## Next phases
-- Phase 2: Supabase accounts and cloud sync (offline queue + sync without duplicates), multi-user and multi-branch, suppliers and purchase orders, printable receipts
 - Phase 3: AI assistant via an AI API, sales and stock forecasting, automated insights
 - Phase 4: online ordering, loyalty, payments (PayMongo/Xendit for GCash/Maya QR), financing referrals
 

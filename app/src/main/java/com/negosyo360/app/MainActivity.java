@@ -9,6 +9,10 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
+import android.text.TextUtils;
 import android.provider.MediaStore;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -40,6 +44,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> fileCb;
     private PermissionRequest pendingPerm;
+    private WebView printView; // kept alive until the print job is created
 
     @Override
     protected void onCreate(Bundle state) {
@@ -175,6 +180,29 @@ public class MainActivity extends Activity {
                 i.setType("text/plain");
                 i.putExtra(Intent.EXTRA_TEXT, text);
                 startActivity(Intent.createChooser(i, "Send with"));
+            });
+        }
+        /** Prints a receipt or order through Android printing (Wi-Fi/Bluetooth printers or Save as PDF). */
+        @JavascriptInterface
+        public void printText(String title, String text) {
+            runOnUiThread(() -> {
+                printView = new WebView(MainActivity.this);
+                printView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
+                        String job = "Negosyo360 " + title;
+                        PrintDocumentAdapter ad = v.createPrintDocumentAdapter(job);
+                        PrintAttributes attrs = new PrintAttributes.Builder()
+                                .setMediaSize(PrintAttributes.MediaSize.ISO_A6)
+                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS).build();
+                        pm.print(job, ad, attrs);
+                    }
+                });
+                String html = "<html><head><meta name='viewport' content='width=device-width'>"
+                        + "<style>body{margin:12px}pre{font:13px/1.4 monospace;white-space:pre-wrap;margin:0}</style></head><body><pre>"
+                        + TextUtils.htmlEncode(text) + "</pre></body></html>";
+                printView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
             });
         }
     }
