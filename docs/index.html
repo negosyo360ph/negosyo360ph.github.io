@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Negosyo360: Your business. Your numbers. Your growth.</title>
+<meta name="description" content="Negosyo360 is a free business app for sari-sari stores, small shops, online sellers and freelancers in the Philippines. Record sales, track stock, expenses, utang and staff on your phone, even offline.">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: plain, confident product page. Download first, then what it does, then why it's different. */
+:root{
+  --brand:#12406a; --brand-2:#1d5d93; --accent:#e8892b; --accent-soft:#fdf0e1;
+  --ink:#14212f; --ink-2:#56677b; --line:#e1e6ec; --bg:#f2f4f7; --surface:#fff; --good:#1d8456; --bad:#bf3b35;
+  --display:"Sora","Segoe UI",system-ui,sans-serif; --body:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+a{color:var(--brand-2)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
+header{border-bottom:1px solid var(--line)}
+header .wrap{display:flex;justify-content:space-between;align-items:center;padding-top:14px;padding-bottom:14px;gap:12px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:9px;font-family:var(--display);font-weight:700;font-size:20px;color:var(--brand);text-decoration:none}
+.logo b{color:var(--accent)}
+.logo img{width:34px;height:34px;border-radius:9px}
+nav{display:flex;gap:18px;flex-wrap:wrap}
+nav a{color:var(--ink-2);font-weight:600;font-size:14px;text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:11px;padding:13px 20px;font-weight:700;text-decoration:none;font-size:16px;border:0}
+.btn-primary{background:var(--accent);color:#1b1206}
+.btn-dark{background:var(--brand);color:#fff}
+.btn-ghost{background:var(--surface);border:1.5px solid var(--line);color:var(--ink)}
+.hero{background:linear-gradient(180deg,#eef4f9,var(--surface));padding:56px 0 48px}
+.hero .wrap{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+.eyebrow{display:inline-block;background:var(--accent-soft);color:#8a4a0b;font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px;margin-bottom:14px}
+.hero h1{font-size:clamp(34px,5vw,56px);line-height:1.05;color:var(--brand)}
+.hero h1 span{color:var(--accent)}
+.lead{font-size:18px;color:var(--ink-2);max-width:52ch;margin:16px 0 24px}
+.ctas{display:flex;gap:12px;flex-wrap:wrap}
+.small{font-size:13px;color:var(--ink-2);margin-top:12px}
+.phone{justify-self:center;width:270px;background:var(--ink);border-radius:36px;padding:9px;box-shadow:0 30px 60px -22px rgba(18,64,106,.55)}
+.phone .s{background:var(--bg);border-radius:28px;padding:16px 13px;display:flex;flex-direction:column;gap:9px;font-size:12px}
+.phone .big{background:var(--brand);color:#fff;border-radius:16px;padding:13px}
+.phone .big b{font-family:var(--display);font-size:24px;display:block}
+.phone .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phone .row div{background:var(--surface);border-radius:12px;padding:9px;color:var(--ink-2)}
+.phone .row b{display:block;color:var(--ink);font-family:var(--display);font-size:15px}
+.phone .al{background:var(--surface);border-radius:12px;padding:9px;border-left:3px solid var(--bad)}
+.phone .al.g{border-color:var(--good)}
+section{padding:56px 0}
+section.alt{background:var(--bg)}
+.sec-head{max-width:660px;margin-bottom:26px}
+.sec-head h2{font-size:clamp(24px,3vw,34px);color:var(--brand)}
+.sec-head p{color:var(--ink-2);margin:8px 0 0}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
+.card h3{font-size:17px;margin-bottom:6px}
+.card p{margin:0;color:var(--ink-2);font-size:15px}
+.diff{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.diff div{border-top:3px solid var(--accent);padding-top:12px}
+.diff b{display:block;font-family:var(--display);margin-bottom:4px}
+.diff span{color:var(--ink-2);font-size:15px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.steps div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.steps div::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;font-weight:700;margin-bottom:8px}
+footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink-2);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (max-width:900px){ .hero .wrap{grid-template-columns:1fr} .grid3,.steps{grid-template-columns:1fr} .diff{grid-template-columns:1fr 1fr} }
+@media (max-width:520px){ .diff{grid-template-columns:1fr} nav{display:none} }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="logo" href="./"><img src="app/icons/icon-192.png" alt="">Negosyo<b>360</b></a>
+  <nav aria-label="Sections"><a href="#features">Features</a><a href="#why">Why Negosyo360</a><a href="#install">How to install</a></nav>
+  <a class="btn btn-dark" style="padding:9px 14px;font-size:14px" href="app/">Open web app</a>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <div>
+    <span class="eyebrow">Free pilot for Philippine small businesses</span>
+    <h1>Your business. Your numbers. <span>Your growth.</span></h1>
+    <p class="lead">Record sales, track stock, expenses, utang and staff on your phone. Negosyo360 tells you every day if your business is doing well, and it works even without internet.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" id="dl" href="https://github.com/REPO_PATH/releases/latest/download/Negosyo360.apk">Download for Android</a>
+      <a class="btn btn-ghost" href="app/">Use it in your browser</a>
+    </div>
+    <p class="small">Android app · free during the pilot · your data stays on your phone</p>
+  </div>
+  <div class="phone" aria-hidden="true"><div class="s">
+    <span style="color:var(--ink-2)">Good afternoon, Nena</span>
+    <div class="big"><span style="color:#cfe0ef">Today's sales</span><b>₱12,850</b><span style="color:#cfe0ef">▲ 12% vs yesterday</span></div>
+    <div class="row"><div>Est. profit<b>₱2,940</b></div><div>Low stock<b style="color:var(--bad)">5 items</b></div></div>
+    <div class="al">3 products need restocking</div>
+    <div class="al g">Sales are 12% higher than yesterday</div>
+  </div></div>
+</div></div>
+
+<section id="features"><div class="wrap">
+  <div class="sec-head"><h2>Everything a small business runs on</h2><p>For sari-sari stores, retail shops, food businesses, online sellers, resellers and freelancers.</p></div>
+  <div class="grid3">
+    <div class="card"><h3>Sales &amp; POS</h3><p>Tap or scan items. Cash with change, GCash, Maya, bank or utang. Discounts, receipts and refunds.</p></div>
+    <div class="card"><h3>Inventory</h3><p>Stock in with suggested quantities, barcode scanning with your phone camera and low-stock alerts.</p></div>
+    <div class="card"><h3>Expenses &amp; profit</h3><p>Record bills and supplies. See sales, cost of goods and estimated profit for today, this week or this month.</p></div>
+    <div class="card"><h3>Cash drawer</h3><p>Know how much cash should be in your drawer. Count it and see right away if you are short or over.</p></div>
+    <div class="card"><h3>Utang list</h3><p>Who owes you, how much, and when it's due. Record partial payments and send reminders by Messenger or SMS.</p></div>
+    <div class="card"><h3>Ask Negosyo</h3><p>Ask "What should I reorder?" or "Why is my profit lower?" and get answers from your own numbers.</p></div>
+  </div>
+</div></section>
+
+<section class="alt" id="why"><div class="wrap">
+  <div class="sec-head"><h2>Made for how Filipino businesses really run</h2></div>
+  <div class="diff">
+    <div><b>Cash is not the same as sales</b><span>GCash, Maya, bank and utang are kept apart from the money in your drawer.</span></div>
+    <div><b>Stock forecasts</b><span>"Coke 1.5L sells about 14 a day. You may run out in 2 days."</span></div>
+    <div><b>Business health score</b><span>One score out of 100 from growth, profit, stock, utang and expenses.</span></div>
+    <div><b>Works offline</b><span>No signal? Keep selling. Everything is saved on the phone.</span></div>
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <div class="sec-head"><h2>How to install on Android</h2></div>
+  <div class="steps">
+    <div><b>Download the APK</b><p style="margin:4px 0 0;color:var(--ink-2)">Tap "Download for Android" on your phone.</p></div>
+    <div><b>Allow the install</b><p style="margin:4px 0 0;color:var(--ink-2)">Open the file. If asked, allow "Install unknown apps" for your browser.</p></div>
+    <div><b>Set up your store</b><p style="margin:4px 0 0;color:var(--ink-2)">Enter your business name, add products and record your first sale.</p></div>
+  </div>
+  <p class="small" style="margin-top:16px">Using an iPhone? Open the web app in Safari and tap Share → Add to Home Screen.</p>
+</div></section>
+
+<footer><div class="wrap"><span>Negosyo360 by Jessie Cajandab</span><span>ajcajandab@gmail.com · Facebook: JC JE Ssie</span></div></footer>
+</body>
+</html>
